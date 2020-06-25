@@ -21,6 +21,7 @@
 #include "fb_gfx.h"
 #include "fd_forward.h"
 #include "fr_forward.h"
+#include <EEPROM.h>
 
 #define ENROLL_CONFIRM_TIMES 5
 #define FACE_ID_SAVE_NUMBER 7
@@ -33,6 +34,87 @@
 #define FACE_COLOR_YELLOW (FACE_COLOR_RED | FACE_COLOR_GREEN)
 #define FACE_COLOR_CYAN   (FACE_COLOR_BLUE | FACE_COLOR_GREEN)
 #define FACE_COLOR_PURPLE (FACE_COLOR_BLUE | FACE_COLOR_RED)
+
+void saveInt(int &index, int value) {
+  EEPROM.write(index++, (value)&0xff);
+  EEPROM.write(index++, (value>>8)&0xff);
+  EEPROM.write(index++, (value>>16)&0xff);
+  EEPROM.write(index++, (value>>24)&0xff);
+}
+int readInt(int &index) {
+  int ret;
+  ret=EEPROM.read(index++);
+  ret|=((int)EEPROM.read(index++))<<8;
+  ret|=((int)EEPROM.read(index++))<<16;
+  ret|=((int)EEPROM.read(index++))<<24;
+  return ret;
+}
+
+void saveConfig(sensor_t * s) {
+  int index=0;
+  saveInt(index, 0xebebebeb);
+  saveInt(index, s->status.framesize);
+  saveInt(index,s->status.quality);
+  saveInt(index,s->status.brightness);
+  saveInt(index,s->status.contrast);
+  saveInt(index,s->status.saturation);
+  saveInt(index,s->status.sharpness);
+  saveInt(index,s->status.special_effect);
+  saveInt(index,s->status.wb_mode);
+  saveInt(index,s->status.awb);
+  saveInt(index,s->status.awb_gain);
+  saveInt(index,s->status.aec);
+  saveInt(index,s->status.aec2);
+  saveInt(index,s->status.ae_level);
+  saveInt(index,s->status.aec_value);
+  saveInt(index,s->status.agc);
+  saveInt(index,s->status.agc_gain);
+  saveInt(index,s->status.gainceiling);
+  saveInt(index,s->status.bpc);
+  saveInt(index,s->status.wpc);
+  saveInt(index,s->status.raw_gma);
+  saveInt(index,s->status.lenc);
+  saveInt(index,s->status.vflip);
+  saveInt(index,s->status.hmirror);
+  saveInt(index,s->status.dcw);
+  saveInt(index,s->status.colorbar);
+  Serial.print("Tallenna  ---z");Serial.println(index);
+  EEPROM.commit();
+}
+
+void readConfig() {
+  sensor_t * s = esp_camera_sensor_get();
+  int index=0;
+  if(readInt(index)==0xebebebeb) {
+ 
+    s->set_framesize(s, (framesize_t) readInt(index));//saveInt(index, s->status.framesize);
+    s->set_quality(s,  readInt(index));//saveInt(index,s->status.quality);
+    s->set_brightness(s,  readInt(index));//saveInt(index,s->status.brightness);
+    s->set_contrast(s,  readInt(index));//saveInt(index,s->status.contrast);
+    s->set_saturation(s,  readInt(index));//saveInt(index,s->status.saturation);
+    s->set_sharpness(s,  readInt(index));//saveInt(index,s->status.sharpness);
+    s->set_special_effect(s,  readInt(index));//saveInt(index,s->status.special_effect);
+    s->set_wb_mode(s,  readInt(index));//saveInt(index,s->status.wb_mode);
+    s->set_whitebal(s,  readInt(index));//saveInt(index,s->status.awb);
+    s->set_gain_ctrl(s,  readInt(index));//saveInt(index,s->status.awb_gain);
+    s->set_exposure_ctrl(s,  readInt(index));//saveInt(index,s->status.aec);
+    s->set_aec2(s,  readInt(index));//saveInt(index,s->status.aec2);
+    s->set_ae_level(s,  readInt(index));//saveInt(index,s->status.ae_level);
+    s->set_aec_value(s,  readInt(index));//saveInt(index,s->status.aec_value);
+    s->set_gain_ctrl(s,  readInt(index));//saveInt(index,s->status.agc);
+    s->set_agc_gain(s,  readInt(index));//saveInt(index,s->status.agc_gain);
+    s->set_gainceiling(s, (gainceiling_t)readInt(index));//saveInt(index,s->status.gainceiling);
+    s->set_bpc(s,  readInt(index));//saveInt(index,s->status.bpc);
+    s->set_wpc(s,  readInt(index));//saveInt(index,s->status.wpc);
+    s->set_raw_gma(s,  readInt(index));//saveInt(index,s->status.raw_gma);
+    s->set_lenc(s,  readInt(index));//saveInt(index,s->status.lenc);
+    s->set_vflip(s,  readInt(index));//saveInt(index,s->status.vflip);
+    s->set_hmirror(s,  readInt(index));//saveInt(index,s->status.hmirror);
+    s->set_dcw(s,  readInt(index));//saveInt(index,s->status.dcw);
+    s->set_colorbar(s,  readInt(index));//saveInt(index,s->status.colorbar);
+  }
+}
+
 
 typedef struct {
         size_t size; //number of values used for filtering
@@ -279,9 +361,7 @@ static esp_err_t capture_handler(httpd_req_t *req){
 
     if (net_boxes){
         detected = true;
-        if(recognition_enabled){
-            face_id = run_face_recognition(image_matrix, net_boxes);
-        }
+
         draw_face_boxes(image_matrix, net_boxes, face_id);
         free(net_boxes->score);
         free(net_boxes->box);
@@ -377,9 +457,7 @@ static esp_err_t stream_handler(httpd_req_t *req){
                         if (net_boxes || fb->format != PIXFORMAT_JPEG){
                             if(net_boxes){
                                 detected = true;
-                                if(recognition_enabled){
-                                    face_id = run_face_recognition(image_matrix, net_boxes);
-                                }
+
                                 fr_recognize = esp_timer_get_time();
                                 draw_face_boxes(image_matrix, net_boxes, face_id);
                                 free(net_boxes->score);
@@ -513,21 +591,18 @@ static esp_err_t cmd_handler(httpd_req_t *req){
     else if(!strcmp(variable, "ae_level")) res = s->set_ae_level(s, val);
     else if(!strcmp(variable, "face_detect")) {
         detection_enabled = val;
-        if(!detection_enabled) {
-            recognition_enabled = 0;
-        }
+
     }
     else if(!strcmp(variable, "face_enroll")) is_enrolling = val;
     else if(!strcmp(variable, "face_recognize")) {
-        recognition_enabled = val;
-        if(recognition_enabled){
-            detection_enabled = val;
-        }
+
     }
     else {
         res = -1;
     }
-
+    Serial.println("TALLENNA");
+    saveConfig(s);
+    
     if(res){
         return httpd_resp_send_500(req);
     }
@@ -644,7 +719,9 @@ void startCameraServer(){
     mtmn_config.o_threshold.candidate_number = 1;
     
     face_id_init(&id_list, FACE_ID_SAVE_NUMBER, ENROLL_CONFIRM_TIMES);
-    
+        Serial.println("LUE");
+    EEPROM.begin(512);
+    readConfig();
     Serial.printf("Starting web server on port: '%d'\n", config.server_port);
     if (httpd_start(&camera_httpd, &config) == ESP_OK) {
         httpd_register_uri_handler(camera_httpd, &index_uri);
