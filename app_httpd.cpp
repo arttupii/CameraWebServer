@@ -35,6 +35,17 @@
 #define FACE_COLOR_CYAN   (FACE_COLOR_BLUE | FACE_COLOR_GREEN)
 #define FACE_COLOR_PURPLE (FACE_COLOR_BLUE | FACE_COLOR_RED)
 
+void takePhotoStartEvent() {
+    pinMode(4, OUTPUT);
+    digitalWrite(4, HIGH);
+    delay(500);
+}
+
+void takePhotoStopEvent() {
+    pinMode(4, OUTPUT);
+    digitalWrite(4, LOW);
+}
+
 void saveInt(int &index, int value) {
   EEPROM.write(index++, (value)&0xff);
   EEPROM.write(index++, (value>>8)&0xff);
@@ -243,47 +254,6 @@ static void draw_face_boxes(dl_matrix3du_t *image_matrix, box_array_t *boxes, in
     }
 }
 
-static int run_face_recognition(dl_matrix3du_t *image_matrix, box_array_t *net_boxes){
-    dl_matrix3du_t *aligned_face = NULL;
-    int matched_id = 0;
-
-    aligned_face = dl_matrix3du_alloc(1, FACE_WIDTH, FACE_HEIGHT, 3);
-    if(!aligned_face){
-        Serial.println("Could not allocate face recognition buffer");
-        return matched_id;
-    }
-    if (align_face(net_boxes, image_matrix, aligned_face) == ESP_OK){
-        if (is_enrolling == 1){
-            int8_t left_sample_face = enroll_face(&id_list, aligned_face);
-
-            if(left_sample_face == (ENROLL_CONFIRM_TIMES - 1)){
-                Serial.printf("Enrolling Face ID: %d\n", id_list.tail);
-            }
-            Serial.printf("Enrolling Face ID: %d sample %d\n", id_list.tail, ENROLL_CONFIRM_TIMES - left_sample_face);
-            rgb_printf(image_matrix, FACE_COLOR_CYAN, "ID[%u] Sample[%u]", id_list.tail, ENROLL_CONFIRM_TIMES - left_sample_face);
-            if (left_sample_face == 0){
-                is_enrolling = 0;
-                Serial.printf("Enrolled Face ID: %d\n", id_list.tail);
-            }
-        } else {
-            matched_id = recognize_face(&id_list, aligned_face);
-            if (matched_id >= 0) {
-                Serial.printf("Match Face ID: %u\n", matched_id);
-                rgb_printf(image_matrix, FACE_COLOR_GREEN, "Hello Subject %u", matched_id);
-            } else {
-                Serial.println("No Match Found");
-                rgb_print(image_matrix, FACE_COLOR_RED, "Intruder Alert!");
-                matched_id = -1;
-            }
-        }
-    } else {
-        Serial.println("Face Not Aligned");
-        //rgb_print(image_matrix, FACE_COLOR_YELLOW, "Human Detected");
-    }
-
-    dl_matrix3du_free(aligned_face);
-    return matched_id;
-}
 
 static size_t jpg_encode_stream(void * arg, size_t index, const void* data, size_t len){
     jpg_chunking_t *j = (jpg_chunking_t *)arg;
@@ -302,6 +272,8 @@ static esp_err_t capture_handler(httpd_req_t *req){
     esp_err_t res = ESP_OK;
     int64_t fr_start = esp_timer_get_time();
 
+    takePhotoStartEvent();
+    
     fb = esp_camera_fb_get();
     if (!fb) {
         Serial.println("Camera capture failed");
@@ -318,7 +290,7 @@ static esp_err_t capture_handler(httpd_req_t *req){
     bool s;
     bool detected = false;
     int face_id = 0;
-    if(!detection_enabled || fb->width > 400){
+
         size_t fb_len = 0;
         if(fb->format == PIXFORMAT_JPEG){
             fb_len = fb->len;
@@ -332,54 +304,9 @@ static esp_err_t capture_handler(httpd_req_t *req){
         esp_camera_fb_return(fb);
         int64_t fr_end = esp_timer_get_time();
         Serial.printf("JPG: %uB %ums\n", (uint32_t)(fb_len), (uint32_t)((fr_end - fr_start)/1000));
+        takePhotoStopEvent();
         return res;
-    }
-
-    dl_matrix3du_t *image_matrix = dl_matrix3du_alloc(1, fb->width, fb->height, 3);
-    if (!image_matrix) {
-        esp_camera_fb_return(fb);
-        Serial.println("dl_matrix3du_alloc failed");
-        httpd_resp_send_500(req);
-        return ESP_FAIL;
-    }
-
-    out_buf = image_matrix->item;
-    out_len = fb->width * fb->height * 3;
-    out_width = fb->width;
-    out_height = fb->height;
-
-    s = fmt2rgb888(fb->buf, fb->len, fb->format, out_buf);
-    esp_camera_fb_return(fb);
-    if(!s){
-        dl_matrix3du_free(image_matrix);
-        Serial.println("to rgb888 failed");
-        httpd_resp_send_500(req);
-        return ESP_FAIL;
-    }
-
-    box_array_t *net_boxes = face_detect(image_matrix, &mtmn_config);
-
-    if (net_boxes){
-        detected = true;
-
-        draw_face_boxes(image_matrix, net_boxes, face_id);
-        free(net_boxes->score);
-        free(net_boxes->box);
-        free(net_boxes->landmark);
-        free(net_boxes);
-    }
-
-    jpg_chunking_t jchunk = {req, 0};
-    s = fmt2jpg_cb(out_buf, out_len, out_width, out_height, PIXFORMAT_RGB888, 90, jpg_encode_stream, &jchunk);
-    dl_matrix3du_free(image_matrix);
-    if(!s){
-        Serial.println("JPEG compression failed");
-        return ESP_FAIL;
-    }
-
-    int64_t fr_end = esp_timer_get_time();
-    Serial.printf("FACE: %uB %ums %s%d\n", (uint32_t)(jchunk.len), (uint32_t)((fr_end - fr_start)/1000), detected?"DETECTED ":"", face_id);
-    return res;
+    
 }
 
 static esp_err_t stream_handler(httpd_req_t *req){
@@ -397,6 +324,8 @@ static esp_err_t stream_handler(httpd_req_t *req){
     int64_t fr_recognize = 0;
     int64_t fr_encode = 0;
 
+    takePhotoStartEvent();
+    
     static int64_t last_frame = 0;
     if(!last_frame) {
         last_frame = esp_timer_get_time();
@@ -422,7 +351,7 @@ static esp_err_t stream_handler(httpd_req_t *req){
             fr_face = fr_start;
             fr_encode = fr_start;
             fr_recognize = fr_start;
-            if(!detection_enabled || fb->width > 400){
+            
                 if(fb->format != PIXFORMAT_JPEG){
                     bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
                     esp_camera_fb_return(fb);
@@ -435,51 +364,6 @@ static esp_err_t stream_handler(httpd_req_t *req){
                     _jpg_buf_len = fb->len;
                     _jpg_buf = fb->buf;
                 }
-            } else {
-
-                image_matrix = dl_matrix3du_alloc(1, fb->width, fb->height, 3);
-
-                if (!image_matrix) {
-                    Serial.println("dl_matrix3du_alloc failed");
-                    res = ESP_FAIL;
-                } else {
-                    if(!fmt2rgb888(fb->buf, fb->len, fb->format, image_matrix->item)){
-                        Serial.println("fmt2rgb888 failed");
-                        res = ESP_FAIL;
-                    } else {
-                        fr_ready = esp_timer_get_time();
-                        box_array_t *net_boxes = NULL;
-                        if(detection_enabled){
-                            net_boxes = face_detect(image_matrix, &mtmn_config);
-                        }
-                        fr_face = esp_timer_get_time();
-                        fr_recognize = fr_face;
-                        if (net_boxes || fb->format != PIXFORMAT_JPEG){
-                            if(net_boxes){
-                                detected = true;
-
-                                fr_recognize = esp_timer_get_time();
-                                draw_face_boxes(image_matrix, net_boxes, face_id);
-                                free(net_boxes->score);
-                                free(net_boxes->box);
-                                free(net_boxes->landmark);
-                                free(net_boxes);
-                            }
-                            if(!fmt2jpg(image_matrix->item, fb->width*fb->height*3, fb->width, fb->height, PIXFORMAT_RGB888, 90, &_jpg_buf, &_jpg_buf_len)){
-                                Serial.println("fmt2jpg failed");
-                                res = ESP_FAIL;
-                            }
-                            esp_camera_fb_return(fb);
-                            fb = NULL;
-                        } else {
-                            _jpg_buf = fb->buf;
-                            _jpg_buf_len = fb->len;
-                        }
-                        fr_encode = esp_timer_get_time();
-                    }
-                    dl_matrix3du_free(image_matrix);
-                }
-            }
         }
         if(res == ESP_OK){
             size_t hlen = snprintf((char *)part_buf, 64, _STREAM_PART, _jpg_buf_len);
@@ -524,6 +408,8 @@ static esp_err_t stream_handler(httpd_req_t *req){
     }
 
     last_frame = 0;
+
+    takePhotoStopEvent();
     return res;
 }
 
