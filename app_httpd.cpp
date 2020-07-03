@@ -36,14 +36,14 @@
 #define FACE_COLOR_PURPLE (FACE_COLOR_BLUE | FACE_COLOR_RED)
 
 void takePhotoStartEvent() {
-    pinMode(4, OUTPUT);
-    digitalWrite(4, HIGH);
-    delay(500);
+    //pinMode(4, OUTPUT);
+    //digitalWrite(4, HIGH);
+    //delay(500);
 }
 
 void takePhotoStopEvent() {
-    pinMode(4, OUTPUT);
-    digitalWrite(4, LOW);
+    //pinMode(4, OUTPUT);
+    //digitalWrite(4, LOW);
 }
 
 void saveInt(int &index, int value) {
