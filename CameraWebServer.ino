@@ -6,7 +6,6 @@
 #include <ArduinoOTA.h>
 WiFiMulti wifiMulti;
 
-
 #include "camera_pins.h"
 #include "camera_index.h"
 
@@ -39,7 +38,7 @@ void setup() {
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
   //init with high specs to pre-allocate larger buffers
-  if(psramFound()){
+  if (psramFound()) {
     config.frame_size = FRAMESIZE_UXGA;
     config.jpeg_quality = 10;
     config.fb_count = 2;
@@ -76,62 +75,65 @@ void setup() {
   s->set_hmirror(s, 1);
 #endif
 
-  //WiFi.begin(ssid, password);
-
-  wifiMulti.addAP("xxxxxx", "xxxxxx");
-//  wifiMulti.addAP("xxxxxx", "xxxxxxxxxxxxx");
-//  wifiMulti.addAP("xxxxxx", "xxxxxxxxxxxxx");
-  Serial.println("");
-  Serial.println("WiFi connected");
+  ADD_WIFI_MACRO
 
   Serial.println("Connecting Wifi...");
-  if(wifiMulti.run() == WL_CONNECTED) {
-        Serial.println("");
-        Serial.println("WiFi connected");
-        Serial.println("IP address: ");
-        Serial.println(WiFi.localIP());
+  if (wifiMulti.run() == WL_CONNECTED) {
+    Serial.println("");
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
   }
-    
+
   startCameraServer();
 
   Serial.print("Camera Ready! Use 'http://");
   Serial.print(WiFi.localIP());
   Serial.println("' to connect");
+#ifdef ENABLE_OTA
+  ArduinoOTA
+  .onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH)
+      type = "sketch";
+    else // U_SPIFFS
+      type = "filesystem";
 
-    ArduinoOTA
-    .onStart([]() {
-      String type;
-      if (ArduinoOTA.getCommand() == U_FLASH)
-        type = "sketch";
-      else // U_SPIFFS
-        type = "filesystem";
-
-      // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
-      Serial.println("Start updating " + type);
-    })
-    .onEnd([]() {
-      Serial.println("\nEnd");
-    })
-    .onProgress([](unsigned int progress, unsigned int total) {
-      Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-    })
-    .onError([](ota_error_t error) {
-      Serial.printf("Error[%u]: ", error);
-      if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-      else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-      else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-      else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-      else if (error == OTA_END_ERROR) Serial.println("End Failed");
-    });
-
+    // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+    Serial.println("Start updating " + type);
+  })
+  .onEnd([]() {
+    Serial.println("\nEnd");
+  })
+  .onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  })
+  .onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+  ArduinoOTA.setHostname(OTA_HOSTNAME);
   ArduinoOTA.begin();
+#endif
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-    if(wifiMulti.run() != WL_CONNECTED) {
-        Serial.println("WiFi not connected!");
-        delay(1000);
+
+#ifdef ENABLE_OTA
+  ArduinoOTA.handle();
+#endif
+  static long t = millis();
+  if (t < millis()) {
+    Serial.println("IP address: ");
+    Serial.print(WiFi.localIP());
+    t = millis() + 5000;
+    if (wifiMulti.run() != WL_CONNECTED) {
+      Serial.println("WiFi not connected!");
     }
-    ArduinoOTA.handle();
+  }
 }

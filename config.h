@@ -12,6 +12,20 @@
 //#define CAMERA_MODEL_M5STACK_PSRAM
 //#define CAMERA_MODEL_M5STACK_WIDE
 #define CAMERA_MODEL_AI_THINKER
-//#define ESP32CAM 
+//#define ESP32CAM
+
+
+#define ENABLE_OTA
+#define OTA_HOSTNAME "AUTOTALLI KAMERA"
+
+#define ADD_WIFI_MACRO \
+  wifiMulti.addAP("APNAME", "PASSWORD"); 
+  //  wifiMulti.addAP("xxxxxx", "xxxxxxxxxxxxx"); \
+  //  wifiMulti.addAP("xxxxxx", "xxxxxxxxxxxxx"); \
+  // ADD_WIFI_MACRO END
+
+
+#define FLASHLIGHT_PIN -1 /*4*/
+
 
 #endif
